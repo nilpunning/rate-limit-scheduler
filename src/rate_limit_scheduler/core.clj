@@ -50,11 +50,9 @@
       (let [cmd (a/poll! command-chan)]
         (when (not= cmd :stop)
           (let [request (dq/take! durable-queues :ingress period :timeout)]
-            (if (= request :timeout)
-              (recur)
-              (do
-                (a/put! ingress-buffer request)
-                (recur)))))))))
+            (when (not= request :timeout)
+              (a/put! ingress-buffer request))
+            (recur)))))))
 
 (defn splitter [ingress-buffer rate-limited-service split-queues]
   (a/go-loop []
