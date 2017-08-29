@@ -5,11 +5,6 @@
 (defn queue-conj [queue v]
   (conj (if (nil? queue) PersistentQueue/EMPTY queue) v))
 
-(defn queue-put [split-queue k v]
-  (-> split-queue
-      (update-in [::map-queues k] queue-conj v)
-      (update ::n inc)))
-
 ; If split-with proves to be a performance bottleneck,
 ; replace the sorted-map with a data.avl version:
 ; https://github.com/clojure/data.avl
@@ -27,44 +22,48 @@
       (dissoc map-queues k)
       (assoc map-queues k new-queue))))
 
-(defn queue-take [split-queue k]
-  (-> split-queue
-      (update ::map-queues queue-pop k)
-      (update ::n dec)))
-
 (defn make [limit init-round-robin]
   "limit            - max number of items in datastructure
    init-round-robin - initial value used in round-robin comparision"
-  (ref {::limit      limit
-        ::n          0
-        ::map-queues (sorted-map)
-        ::last-taken init-round-robin}))
+  {::limit      limit
+   ::n          0
+   ::map-queues (sorted-map)
+   ::last-taken init-round-robin})
 
-(defn put! [split-queue k v]
-  "Returns true if under the limit and able to put"
-  (dosync
-    (let [{:keys [::limit ::n]} @split-queue
-          able? (<= n limit)]
-      (when able?
-        (alter split-queue queue-put k v))
-      able?)))
+(defn put [split-queue k v]
+  (let [{:keys [::limit ::n]} split-queue
+        able? (< n limit)]
+    [able? (if able?
+             (-> split-queue
+                 (update-in [::map-queues k] queue-conj v)
+                 (update ::n inc))
+             split-queue)]))
 
-(defn take! [split-queue]
-  "Returns [able? val]
-   able? - true if there was something to take
-   val   - value taken"
-  (dosync
-    (let [[queue k] (next-queue @split-queue)
-          able? (not (nil? k))]
-      (when able?
-        (alter split-queue queue-take k))
-      [able? (first queue)])))
+(defn take [split-queue]
+  (let [[queue k] (next-queue split-queue)
+        able? (boolean k)]
+    [able? (if able?
+             (-> split-queue
+                 (update ::map-queues queue-pop k)
+                 (update ::n dec))
+             split-queue)]))
 
 (comment
-  (def sq (make 1 Long/MIN_VALUE))
+  (def sq (ref (make 1 Long/MIN_VALUE)))
 
-  (take! sq)
 
-  (put! sq 0 {:hello :world})
+  (dosync
+    (let [[able? new-sq] (put @sq 0 {:hello :world})]
+      (println able?)
+      (ref-set sq new-sq)))
+
+  (dosync
+    (let [[able? new-sq] (take @sq)]
+      (println able?)
+      (ref-set sq new-sq)))
+
 
   )
+
+; TODO: Update last-taken
+; TODO: https://dev.clojure.org/jira/browse/CLJ-976?page=com.atlassian.jira.plugin.system.issuetabpanels:changehistory-tabpanel
