@@ -33,24 +33,27 @@
 (defn put [split-queue k v]
   (let [{:keys [::limit ::n]} split-queue
         able? (< n limit)]
-    [able? (if able?
-             (-> split-queue
-                 (update-in [::map-queues k] queue-conj v)
-                 (update ::n inc))
-             split-queue)]))
+    [able?
+     (if able?
+       (-> split-queue
+           (update-in [::map-queues k] queue-conj v)
+           (update ::n inc))
+       split-queue)]))
 
 (defn take [split-queue]
   (let [[queue k] (next-queue split-queue)
         able? (boolean k)]
-    [able? (if able?
-             (-> split-queue
-                 (update ::map-queues queue-pop k)
-                 (update ::n dec))
-             split-queue)]))
+    [able?
+     (first queue)
+     (if able?
+       (-> split-queue
+           (update ::map-queues queue-pop k)
+           (update ::n dec)
+           (assoc ::last-taken k))
+       split-queue)]))
 
 (comment
-  (def sq (ref (make 1 Long/MIN_VALUE)))
-
+  (def sq (ref (make 3 Long/MIN_VALUE)))
 
   (dosync
     (let [[able? new-sq] (put @sq 0 {:hello :world})]
@@ -58,12 +61,10 @@
       (ref-set sq new-sq)))
 
   (dosync
-    (let [[able? new-sq] (take @sq)]
-      (println able?)
+    (let [[able? val new-sq] (take @sq)]
+      (println able? val)
       (ref-set sq new-sq)))
-
 
   )
 
-; TODO: Update last-taken
 ; TODO: https://dev.clojure.org/jira/browse/CLJ-976?page=com.atlassian.jira.plugin.system.issuetabpanels:changehistory-tabpanel
