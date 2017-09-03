@@ -40,7 +40,7 @@
            (update ::n inc))
        split-queue)]))
 
-(defn take [split-queue]
+(defn poll [split-queue]
   (let [[queue k] (next-queue split-queue)
         able? (boolean k)]
     [able?
@@ -61,10 +61,9 @@
       (ref-set sq new-sq)))
 
   (dosync
-    (let [[able? val new-sq] (take @sq)]
+    (let [[able? val new-sq] (poll @sq)]
       (println able? val)
       (ref-set sq new-sq)))
 
   )
 
-; TODO: https://dev.clojure.org/jira/browse/CLJ-976?page=com.atlassian.jira.plugin.system.issuetabpanels:changehistory-tabpanel
