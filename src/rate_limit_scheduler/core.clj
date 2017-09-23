@@ -17,80 +17,107 @@
   (on-rejected [this reqs]
     "Called with rejected requests."))
 
-(def sample-rate-limited-service
-  (reify
-    IRateLimitedService
-    (split-predicate [_ req]
-      (:id req))
-    (request [_ req]
-      (println "request" req)
-      [[{:answer true}] [] {:limit 100 :remaining 100 :reset 100}])
-    (request-batch [_ reqs]
-      (println "request-batch" reqs)
-      [(map (constantly {:answer true}) reqs) [] {:limit 100 :remaining 100 :reset 100}])
-    (on-success [_ responses]
-      (println "on-success" responses))
-    (on-rejected [_ reqs]
-      (println "on-rejected" reqs))))
-
-(defn put [rate-limit-scheduler request]
+(defn put [rate-limit-scheduler req]
   (let [{:keys [durable-queue]} rate-limit-scheduler]
-    (dq/put! durable-queue request)))
+    (dq/put! durable-queue req)))
 
 (defn split-loop [rate-limit-scheduler]
   "Reads from durable queue writes to split queue."
-  (let [{:keys [timeout
+  (let [{:keys [split-loop-command-chan
+                timeout
                 durable-queue
-                command-chan
                 split-queue
                 rate-limited-service]}
         rate-limit-scheduler]
     (loop []
-      (let [cmd (a/poll! command-chan)]
+      (let [cmd (a/poll! split-loop-command-chan)]
         (when (not= cmd :stop)
-          (let [request (dq/take! durable-queue)]
-            (when (not= request :timeout)
+          (let [req (dq/take! durable-queue)]
+            (when (not= req :timeout)
               (when (dosync
                       (let [[able? new-sq]
                             (sq/put
                               @split-queue
-                              (split-predicate rate-limited-service request)
-                              request)]
-                        (ref-set split-queue new-sq)
+                              (split-predicate rate-limited-service @req)
+                              req)]
+                        (when able?
+                          (ref-set split-queue new-sq))
                         (not able?)))
                 ; When not able to put onto split queue back off.
                 (Thread/sleep timeout)))
             (recur)))))))
 
-(defn start [rate-limit-scheduler]
-  (doto (Thread. ^Runnable (partial split-loop rate-limit-scheduler))
-    (.setName "split-loop")
+(defn request-loop [rate-limit-scheduler]
+  "Reads from the split-queue and makes requests."
+  (let [{:keys [request-loop-command-chan
+                timeout
+                durable-queue
+                split-queue
+                requesting?
+                rate-limited-service]}
+        rate-limit-scheduler]
+    (loop []
+      (let [cmd (a/poll! request-loop-command-chan)]
+        (when (not= cmd :stop)
+          (let [[able? req] (dosync
+                              (let [[able? req new-sq] (sq/poll @split-queue)]
+                                (when able?
+                                  (ref-set split-queue new-sq))
+                                [able? req]))]
+            (if able?
+              (do
+                (reset! requesting? true)
+                (request rate-limited-service @req)
+                (dq/complete! req)
+                (reset! requesting? false))
+              ; When not able to poll from split-queue back off.
+              (Thread/sleep timeout)))
+          (recur))))))
+
+(defn start-thread [name fn]
+  (doto (Thread. ^Runnable fn)
+    (.setName name)
     (.start)))
+
+(defn start [rate-limit-scheduler]
+  (start-thread "split-loop " (partial split-loop rate-limit-scheduler))
+  (start-thread "request-loop" (partial request-loop rate-limit-scheduler)))
 
 (defn stop [rate-limit-scheduler]
   (let [{:keys [command-chan]} rate-limit-scheduler]
     (a/put! command-chan :stop)))
 
+(defn drain [rate-limit-scheduler]
+  (let [{:keys [split-loop-command-chan
+                request-loop-command-chan
+                split-queue
+                requesting?]}
+        rate-limit-scheduler]
+    (a/put! split-loop-command-chan :stop)
+    (while (and (> (get @split-queue ::sq/n) 0)
+                (not @requesting?))
+      (Thread/sleep 100))
+    (a/put! request-loop-command-chan :stop)))
+
 (defn delete! [rate-limit-scheduler]
   (let [{:keys [durable-queue]} rate-limit-scheduler]
     (dq/delete! durable-queue)))
 
-(defn rate-limit-scheduler [timeout limit init-round-robin]
-  {:timeout              timeout
-   :rate-limited-service sample-rate-limited-service
-   :durable-queue        (dq/make! timeout)
-   :command-chan         (a/chan)
-   :split-queue          (ref (sq/make limit init-round-robin))})
+(defn rate-limit-scheduler
+  [rate-limited-service timeout limit init-round-robin]
+  (let [command-chan (a/chan)
+        split-loop-command-chan (a/chan)
+        request-loop-command-chan (a/chan)
+        mult (a/mult command-chan)]
 
-(comment
+    (a/tap mult split-loop-command-chan)
+    (a/tap mult request-loop-command-chan)
 
-  (def rls (rate-limit-scheduler))
-  (start rls)
-  (put rls {:id 0 :content :stuff})
-  (put rls {:id 1 :content :junk})
-  (put rls {:id 1 :content :more-junk})
-  (stop rls)
-
-  (delete! rls)
-
-  )
+    {:rate-limited-service      rate-limited-service
+     :timeout                   timeout
+     :durable-queue             (dq/make! timeout)
+     :command-chan              command-chan
+     :split-loop-command-chan   split-loop-command-chan
+     :request-loop-command-chan request-loop-command-chan
+     :split-queue               (ref (sq/make limit init-round-robin))
+     :requesting?               (atom false)}))
