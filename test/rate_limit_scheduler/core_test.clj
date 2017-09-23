@@ -9,18 +9,12 @@
     rls/IRateLimitedService
     (split-predicate [_ req]
       (:id req))
-    (request [_ req]
-      (swap! request-calls inc)
-      [[{:answer true}] [] {:limit 100 :remaining 100 :reset 100}])
+    (poll-size [_]
+      1)
     (request-batch [_ reqs]
-      (println "request-batch" reqs)
-      [(map (constantly {:answer true}) reqs) [] {:limit 100 :remaining 100 :reset 100}])
-    (on-success [_ responses]
-      (println "on-success" responses))
-    (on-rejected [_ reqs]
-      (println "on-rejected" reqs))))
+      (swap! request-calls inc))))
 
-(defn cleanup! []
+(defn cleanup! []=
   (dq/delete! (dq/make! 10)))
 
 (deftest request-test
@@ -32,7 +26,7 @@
         scheduler (rls/rate-limit-scheduler service 1000 n 0)]
     (rls/start scheduler)
     (doseq [x (range n)]
-      (rls/put scheduler {:id x}))
+      (rls/put scheduler {:id (mod x 275)}))
     (rls/drain scheduler)
     (rls/delete! scheduler)
     (is (= n @request-calls))))

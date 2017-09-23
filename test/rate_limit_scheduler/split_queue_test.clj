@@ -39,6 +39,16 @@
         [_ d sq7] (split-queue/poll sq6)]
     (is (= ["a" "c" "b" nil] [a c b d]))))
 
+(deftest poll-batch
+  "Test poll batch."
+  (let [sq0 (split-queue/make 3 Long/MIN_VALUE)
+        [able0? sq1] (split-queue/put sq0 0 "a")
+        [able1? sq2] (split-queue/put sq1 0 "b")
+        [able2? sq3] (split-queue/put sq2 1 "c")
+        [able3? sq4] (split-queue/put sq3 1 "d")
+        [vals sq5] (split-queue/poll sq4 5)]
+    (is (= vals ["a" "c" "b"]))))
+
 (comment
   (run-tests)
   )

@@ -30,6 +30,10 @@
    ::map-queues (sorted-map)
    ::last-taken init-round-robin})
 
+(defn stats [split-queue]
+  {:n            (::n split-queue)
+   :n-map-queues (count (::map-queues split-queue))})
+
 (defn put [split-queue k v]
   (let [{:keys [::limit ::n]} split-queue
         able? (< n limit)]
@@ -40,17 +44,27 @@
            (update ::n inc))
        split-queue)]))
 
-(defn poll [split-queue]
-  (let [[queue k] (next-queue split-queue)
-        able? (boolean k)]
-    [able?
-     (first queue)
-     (if able?
-       (-> split-queue
-           (update ::map-queues queue-pop k)
-           (update ::n dec)
-           (assoc ::last-taken k))
-       split-queue)]))
+(defn poll
+  ([split-queue]
+   (let [[queue k] (next-queue split-queue)
+         able? (boolean k)]
+     [able?
+      (first queue)
+      (if able?
+        (-> split-queue
+            (update ::map-queues queue-pop k)
+            (update ::n dec)
+            (assoc ::last-taken k))
+        split-queue)]))
+  ([split-queue n]
+   (loop [vals []
+          split-queue split-queue]
+     (if (< (count vals) n)
+       (let [[able? val new-sq] (poll split-queue)]
+         (if able?
+           (recur (conj vals val) new-sq)
+           [vals split-queue]))
+       [vals split-queue]))))
 
 (comment
   (def sq (ref (make 3 Long/MIN_VALUE)))
