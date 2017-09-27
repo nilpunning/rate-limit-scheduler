@@ -2,8 +2,7 @@
   (:require [clojure.core.async :as a]
             [rate-limit-scheduler
              [durable-queue :as dq]
-             [split-queue :as sq]])
-  (:import [java.io Closeable]))
+             [split-queue :as sq]]))
 
 (defprotocol IRateLimitedService
   (split-predicate [this req]

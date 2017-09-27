@@ -26,7 +26,6 @@
         [_ d sq7] (split-queue/poll sq6)]
     (is (= ["a" "b" "c" nil] [a b c d]))))
 
-
 (deftest round-robin-queues
   "Queues should be chosen from in a round robin fashion."
   (let [sq0 (split-queue/make 3 Long/MIN_VALUE)
