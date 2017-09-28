@@ -14,8 +14,8 @@
     (request-batch [_ reqs]
       (swap! request-calls inc))))
 
-(defn cleanup! []=
-  (dq/delete! (dq/make! 10)))
+(defn cleanup! []
+  (dq/delete! (dq/make! 1)))
 
 (deftest request-test
   "Puts get through the system to request."
@@ -28,7 +28,6 @@
     (doseq [x (range n)]
       (rls/put scheduler {:id (mod x 275)}))
     (rls/drain scheduler)
-    (rls/delete! scheduler)
     (is (= n @request-calls))))
 
 (comment

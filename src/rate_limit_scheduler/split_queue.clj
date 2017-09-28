@@ -65,19 +65,3 @@
            (recur (conj vals val) new-sq)
            [vals split-queue]))
        [vals split-queue]))))
-
-(comment
-  (def sq (ref (make 3 Long/MIN_VALUE)))
-
-  (dosync
-    (let [[able? new-sq] (put @sq 0 {:hello :world})]
-      (println able?)
-      (ref-set sq new-sq)))
-
-  (dosync
-    (let [[able? val new-sq] (poll @sq)]
-      (println able? val)
-      (ref-set sq new-sq)))
-
-  )
-
