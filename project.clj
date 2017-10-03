@@ -6,4 +6,5 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/core.async "0.3.443"]
                  [factual/durable-queue "0.1.5"]
-                 [http-kit "2.2.0"]])
+                 [http-kit "2.2.0"]
+                 [cheshire "5.8.0"]])
