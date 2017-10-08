@@ -1,35 +1,30 @@
 (ns rate-limit-scheduler.core-test
   (:require [clojure.test :refer :all]
+            [org.httpkit.client :as http]
+            [cheshire.core :as cheshire]
             [rate-limit-scheduler
-             [durable-queue :as dq]
              [core :as rls]]))
 
-(defn test-rate-limited-service [request-calls]
-  (reify
-    rls/IRateLimitedService
-    (split-predicate [_ req]
-      (:id req))
-    (poll-size [_]
-      1)
-    (request-batch [_ reqs]
-      (swap! request-calls inc))))
+(def server-options {:port 8080})
 
-(defn cleanup! []
-  (dq/delete! (dq/make! 1)))
+(defonce system (rls/make-system server-options 3))
 
-(deftest request-test
-  "Puts get through the system to request."
-  (cleanup!)
-  (let [n 10000
-        request-calls (atom 0)
-        service (test-rate-limited-service request-calls)
-        scheduler (rls/rate-limit-scheduler service 1000 n 0)]
-    (rls/start scheduler)
-    (doseq [x (range n)]
-      (rls/put scheduler {:id (mod x 275)}))
-    (rls/drain scheduler)
-    (is (= n @request-calls))))
+(defn post [reqs]
+  (deref
+    (http/request
+      {:url    (str
+                 "http://localhost:"
+                 (:port server-options))
+       :method :post
+       :body   (cheshire/generate-string reqs)})))
 
 (comment
-  (run-tests)
+  (rls/stop system)
+  (reset! system (rls/make-system server-options 3))
+
+  (deref system)
+  (post [:a])
+  (post [:b :c])
+  (post [:d :e])
+
   )

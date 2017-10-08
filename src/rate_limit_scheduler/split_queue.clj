@@ -2,66 +2,55 @@
   (:import [java.lang Thread]
            [clojure.lang PersistentQueue]))
 
-(defn queue-conj [queue v]
-  (conj (if (nil? queue) PersistentQueue/EMPTY queue) v))
-
-; If split-with proves to be a performance bottleneck,
-; replace the sorted-map with a data.avl version:
-; https://github.com/clojure/data.avl
 (defn round-robin [s last-taken]
   (first (apply concat (reverse (split-with (partial >= last-taken) s)))))
 
 (defn next-queue [split-queue]
-  (let [{:keys [::last-taken ::map-queues]} split-queue
-        k (round-robin (keys map-queues) last-taken)]
-    [(get map-queues k) k]))
+  (let [{:keys [::last-taken ::queues]} split-queue
+        i (round-robin (range (count queues)) last-taken)]
+    [(get queues i) i]))
 
-(defn queue-pop [map-queues k]
-  (let [new-queue (pop (get map-queues k))]
+(defn vec-remove [coll pos]
+  (vec (concat (subvec coll 0 pos) (subvec coll (inc pos)))))
+
+(defn queue-pop [queues i]
+  (let [new-queue (vec (rest (get queues i)))]
     (if (empty? new-queue)
-      (dissoc map-queues k)
-      (assoc map-queues k new-queue))))
+      (vec-remove queues i)
+      (assoc queues i new-queue))))
 
 (defn make [limit init-round-robin]
-  "limit            - max number of items in datastructure
+  "limit            - max number of queues
    init-round-robin - initial value used in round-robin comparision"
   {::limit      limit
    ::n          0
-   ::map-queues (sorted-map)
+   ::queues     []
    ::last-taken init-round-robin})
 
 (defn stats [split-queue]
-  {:n            (::n split-queue)
-   :n-map-queues (count (::map-queues split-queue))})
+  (let [{map-queues ::queues} split-queue]
+    {:n        (reduce (fn [a queue] (+ a (count queue))) map-queues)
+     :n-queues (count map-queues)}))
 
-(defn put [split-queue k v]
-  (let [{:keys [::limit ::n]} split-queue
-        able? (< n limit)]
-    [able?
-     (if able?
-       (-> split-queue
-           (update-in [::map-queues k] queue-conj v)
-           (update ::n inc))
-       split-queue)]))
+(defn put [split-queue vals]
+  (let [{:keys [::limit ::queues]} split-queue]
+    (if (< (count queues) limit)
+      (update split-queue ::queues conj vals)
+      split-queue)))
 
 (defn poll
   ([split-queue]
-   (let [[queue k] (next-queue split-queue)
-         able? (boolean k)]
-     [able?
-      (first queue)
-      (if able?
+   (let [[queue i] (next-queue split-queue)]
+     [(first queue)
+      (if i
         (-> split-queue
-            (update ::map-queues queue-pop k)
-            (update ::n dec)
-            (assoc ::last-taken k))
+            (update ::queues queue-pop i)
+            (assoc ::last-taken i))
         split-queue)]))
   ([split-queue n]
    (loop [vals []
           split-queue split-queue]
      (if (< (count vals) n)
-       (let [[able? val new-sq] (poll split-queue)]
-         (if able?
-           (recur (conj vals val) new-sq)
-           [vals split-queue]))
+       (let [[val new-sq] (poll split-queue)]
+         (recur (conj vals val) new-sq))
        [vals split-queue]))))
