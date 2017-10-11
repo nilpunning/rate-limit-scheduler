@@ -19,13 +19,16 @@
       (vec-remove queues i)
       (assoc queues i new-queue))))
 
-(defn make [limit init-round-robin]
-  "limit            - max number of queues
-   init-round-robin - initial value used in round-robin comparision"
-  {::limit      limit
-   ::n          0
-   ::queues     []
-   ::last-taken init-round-robin})
+(defn make
+  ([limit init-round-robin]
+   "limit            - max number of queues
+    init-round-robin - initial value used in round-robin comparision"
+   {::limit      limit
+    ::n          0
+    ::queues     []
+    ::last-taken init-round-robin})
+  ([limit]
+    (make limit -1)))
 
 (defn count-sq [split-queue]
   (let [{queues ::queues} split-queue]
@@ -36,11 +39,14 @@
     {:n        (count-sq split-queue)
      :n-queues (count queues)}))
 
-(defn put [split-queue vals]
+(defn able? [split-queue]
   (let [{:keys [::limit ::queues]} split-queue]
-    (if (< (count queues) limit)
-      (update split-queue ::queues conj vals)
-      split-queue)))
+    (< (count queues) limit)))
+
+(defn put [split-queue vals]
+  (if (able? split-queue)
+    (update split-queue ::queues conj vals)
+    split-queue))
 
 (defn poll
   ([split-queue]

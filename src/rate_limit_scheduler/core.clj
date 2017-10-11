@@ -13,30 +13,25 @@
   (request-batch [this reqs]
     "Makes the requests."))
 
-(defn put [system channel reqs]
-  (update
-    system
-    ::collecting-queue
-    (fn [fq]
-      (->> reqs
-           (map #(identity {::request % ::channel channel}))
-           (sq/put fq)))))
-
-(defn do-handle [req system channel]
-  (server/on-close
-    channel
-    (fn [status]
-      (println "channel closed" status)))
-
-  (->> (:body req)
-       io/reader
-       cheshire/parse-stream
-       (map (fn [r] {::request r ::channel channel}))
-       (swap! system put channel)))
-
 (defn server-handler [system req]
   (server/with-channel req channel
-    (do-handle req system channel)))
+    (let [reqs (->> req
+                    :body
+                    io/reader
+                    cheshire/parse-stream
+                    (map #(identity {::request % ::channel channel})))
+          status (dosync
+                   (if (true? (::collecting? @system))
+                     (if (sq/able? (::collecting-queue @system))
+                       (do
+                         (alter system update ::collecting-queue sq/put reqs)
+                         false)
+                       ; Too Many Requests
+                       429)
+                     ; Service Unavailable
+                     503))]
+      (when status
+        (server/send! channel {:status status})))))
 
 (defn run-server [server-options system]
   (server/run-server
@@ -58,7 +53,7 @@
         system]
     (loop [start-time (System/currentTimeMillis)]
       (when (not= (a/poll! command-chan) :stop)
-        (swap! system collecting-to-draining)
+        (dosync (alter system collecting-to-draining))
         (let [n (poll-size service)
               {:keys [::draining-queue]} @system
               [winners loser-queue] (sq/poll draining-queue)
@@ -75,7 +70,6 @@
                :body    (cheshire/generate-string
                           [(remove-channel (get winner-groups channel))
                            (remove-channel (get loser-groups channel))])}))
-
           (let [end-time (System/currentTimeMillis)
                 diff (- end-time start-time)]
             (when (< diff 2000)
@@ -88,20 +82,25 @@
     (.start)))
 
 (defn make-system [server-options rate-limited-service limit]
-  (let [system (atom {})]
-    (reset!
-      system
-      {::server           (run-server server-options system)
-       ::service          rate-limited-service
-       ::command-chan     (a/chan)
-       ::collecting-queue (sq/make limit 0)
-       ::draining-queue   (sq/make limit 0)})
-    ;(start-thread "request-loop" (partial request-loop system))
+  (let [system (ref {})]
+    (dosync
+      (ref-set
+        system
+        {::server              (run-server server-options system)
+         ::service             rate-limited-service
+         ::command-chan        (a/chan)
+         ::collecting?         true
+         ::collecting-queue    (sq/make limit)
+         ::draining-queue      (sq/make limit)
+         ::request-loop-thread (start-thread
+                                 "request-loop"
+                                 (partial request-loop system))}))
     system))
 
 (defn stop [system]
   ((::server @system) :timeout 0))
 
 (defn drain [system]
-  (let [{:keys [::collecting-queue ::draining-queue ::command-chan]} system]
+  (dosync (alter system assoc ::collecting? false))
+  (let [{:keys [::server ::collecting-queue ::draining-queue ::command-chan]} system]
     ))
