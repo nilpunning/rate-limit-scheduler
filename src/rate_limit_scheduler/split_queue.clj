@@ -27,10 +27,14 @@
    ::queues     []
    ::last-taken init-round-robin})
 
+(defn count-sq [split-queue]
+  (let [{queues ::queues} split-queue]
+    (reduce (fn [a queue] (+ a (count queue))) queues)))
+
 (defn stats [split-queue]
-  (let [{map-queues ::queues} split-queue]
-    {:n        (reduce (fn [a queue] (+ a (count queue))) map-queues)
-     :n-queues (count map-queues)}))
+  (let [{queues ::queues} split-queue]
+    {:n        (count-sq split-queue)
+     :n-queues (count queues)}))
 
 (defn put [split-queue vals]
   (let [{:keys [::limit ::queues]} split-queue]
@@ -54,3 +58,6 @@
        (let [[val new-sq] (poll split-queue)]
          (recur (conj vals val) new-sq))
        [vals split-queue]))))
+
+(defn drain [split-queue]
+  (poll split-queue (count-sq split-queue)))

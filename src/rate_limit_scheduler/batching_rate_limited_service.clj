@@ -30,8 +30,6 @@
   (let [state (atom init-state)]
     (reify
       rls/IRateLimitedService
-      (split-predicate [_ req]
-        (:webhook req))
       (poll-size [_]
         (let [{:keys [limit reset remaining]} state]
           (if (< reset 5)

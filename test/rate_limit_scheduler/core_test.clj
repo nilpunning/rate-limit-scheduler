@@ -7,7 +7,10 @@
 
 (def server-options {:port 8080})
 
-(defonce system (rls/make-system server-options 3))
+(defonce system (rls/make-system
+                  server-options
+                  nil
+                  3))
 
 (defn post [reqs]
   (deref
