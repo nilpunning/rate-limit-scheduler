@@ -39,18 +39,27 @@
             service (test-rate-limited-service winners-per-second)]
         (dosync (alter system assoc ::rls/service service))
         (rls/start system)
-        (let [requests (requests 1000 40)
-              futures (map post requests)
-              resp (map #(cheshire/parse-string (:body @%)) futures)
+        (let [requests (requests 2000 40)
+              promises (vec
+                         (map
+                           #(let [p (promise)]
+                              (rls/start-thread
+                                (str "post" (ffirst %))
+                                (fn []
+                                  (deliver p @(post %))))
+                              p)
+                           requests))
+              resps (map #(cheshire/parse-string (:body @%)) promises)
               n-winners (reduce
                           (fn [a w] (+ a w))
                           0
-                          (map (fn [[w _]] (count w)) resp))]
+                          (map (fn [[w _]] (count w)) resps))]
           (rls/stop system)
-          (is (= (mod winners-per-second n-winners) winners-per-second)))))))
+          (println "n-winners" n-winners)
+          (is (= (mod n-winners winners-per-second) 0)))))))
 
 (comment
-  (requests 100 40)
+  (count (requests 1000 40))
   (cheshire/generate-string [[1] [2] [3]])
   (cheshire/parse-string "[[1], [2], [3]]")
   (rls/stop system)
