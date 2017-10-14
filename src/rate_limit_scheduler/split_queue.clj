@@ -32,7 +32,7 @@
 
 (defn count-sq [split-queue]
   (let [{queues ::queues} split-queue]
-    (reduce (fn [a queue] (+ a (count queue))) queues)))
+    (reduce (fn [a queue] (+ a (count queue))) 0 queues)))
 
 (defn stats [split-queue]
   (let [{queues ::queues} split-queue]
@@ -60,7 +60,8 @@
   ([split-queue n]
    (loop [vals []
           split-queue split-queue]
-     (if (< (count vals) n)
+     (if (and (< (count vals) n)
+              (> (count-sq split-queue) 0))
        (let [[val new-sq] (poll split-queue)]
          (recur (conj vals val) new-sq))
        [vals split-queue]))))

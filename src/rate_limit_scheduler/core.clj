@@ -19,7 +19,7 @@
                     :body
                     io/reader
                     cheshire/parse-stream
-                    (map #(identity {::request % ::channel channel})))
+                    (map #(identity {::body % ::channel channel})))
           status (dosync
                    (if (true? (::collecting? @system))
                      (if (sq/able? (::collecting-queue @system))
@@ -41,25 +41,22 @@
 (defn collecting-to-draining [system]
   (let [{:keys [::collecting-queue]} system
         {:keys [::sq/limit ::sq/last-taken]} collecting-queue]
-    (-> system
-        (assoc ::draining-queue collecting-queue)
-        (assoc ::collecting-queue (sq/make limit last-taken)))))
-
-(defn remove-channel [req]
-  (map #(dissoc % ::channel) req))
+    (assoc
+      system
+      ::draining-queue collecting-queue
+      ::collecting-queue (sq/make limit last-taken))))
 
 (defn request-loop [system]
-  (let [{:keys [::service ::command-chan ::collecting-queue ::draining-queue]}
-        system]
+  (let [{:keys [::service ::command-chan]} @system]
     (loop [start-time (System/currentTimeMillis)]
-      (when (not= (a/poll! command-chan) :stop)
+      (when (not= (a/poll! command-chan) ::stop)
         (dosync (alter system collecting-to-draining))
         (let [n (poll-size service)
               {:keys [::draining-queue]} @system
-              [winners loser-queue] (sq/poll draining-queue)
+              [winners loser-queue] (sq/poll draining-queue n)
               [losers _] (sq/drain draining-queue)
-              winning-resps (request-batch service winners)
-              winner-groups (group-by ::channel winners)
+              winner-resps (request-batch service winners)
+              winner-groups (group-by ::channel winner-resps)
               loser-groups (group-by ::channel losers)
               channels (set (concat (keys winner-groups) (keys loser-groups)))]
           (doseq [channel channels]
@@ -68,8 +65,8 @@
               {:status  200
                :headers {"Content-Type" "application/json"}
                :body    (cheshire/generate-string
-                          [(remove-channel (get winner-groups channel))
-                           (remove-channel (get loser-groups channel))])}))
+                          [(map #(::body %) (get winner-groups channel))
+                           (map #(::body %) (get loser-groups channel))])}))
           (let [end-time (System/currentTimeMillis)
                 diff (- end-time start-time)]
             (when (< diff 2000)
@@ -86,21 +83,28 @@
     (dosync
       (ref-set
         system
-        {::server              (run-server server-options system)
-         ::service             rate-limited-service
-         ::command-chan        (a/chan)
-         ::collecting?         true
-         ::collecting-queue    (sq/make limit)
-         ::draining-queue      (sq/make limit)
-         ::request-loop-thread (start-thread
-                                 "request-loop"
-                                 (partial request-loop system))}))
+        {::server-options   server-options
+         ::service          rate-limited-service
+         ::command-chan     (a/chan)
+         ::collecting?      false
+         ::collecting-queue (sq/make limit)
+         ::draining-queue   (sq/make limit)}))
     system))
 
-(defn stop [system]
-  ((::server @system) :timeout 0))
+(defn start [system]
+  (dosync
+    (alter
+      system
+      merge
+      {::server              (run-server (::server-options @system) system)
+       ::request-loop-thread (start-thread
+                               "request-loop"
+                               (partial request-loop system))
+       ::collecting?         true})))
 
-(defn drain [system]
+(defn stop [system]
   (dosync (alter system assoc ::collecting? false))
-  (let [{:keys [::server ::collecting-queue ::draining-queue ::command-chan]} system]
-    ))
+  (let [{:keys [::server ::command-chan ::request-loop-thread]} @system]
+    (a/put! command-chan ::stop)
+    (.join ^Thread request-loop-thread)
+    (server :timeout 0)))

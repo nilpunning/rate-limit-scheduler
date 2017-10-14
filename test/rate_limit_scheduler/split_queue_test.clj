@@ -9,7 +9,7 @@
             (sq/put [:a])
             (sq/put [:b])
             (sq/poll 2))]
-    (is (= vals [:a nil]))))
+    (is (= vals [:a]))))
 
 (deftest ordered-queue
   "Items are taken from single queue in first in first out order."
@@ -27,6 +27,22 @@
             (sq/put [:c])
             (sq/poll 3))]
     (is (= vals [:a :c :b]))))
+
+(deftest drain
+  "Drain queue"
+  (let [[vals _]
+        (-> (sq/make 2)
+            (sq/put [1 3])
+            (sq/put [2])
+            (sq/drain))]
+    (is (= vals [1 2 3]))))
+
+(deftest poll-empty
+  "Polls of empty queue should return consistent results."
+  (let [[vals _]
+        (-> (sq/make 0)
+            (sq/poll 1))]
+    (is (= vals []))))
 
 (comment
   (run-tests)
