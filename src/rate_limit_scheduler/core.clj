@@ -19,7 +19,7 @@
                     :body
                     io/reader
                     cheshire/parse-stream
-                    (map #(identity {::body % ::channel channel})))
+                    (map #(identity {::request % ::channel channel})))
           status (dosync
                    (if (true? (::collecting? @system))
                      (if (sq/able? (::collecting-queue @system))
@@ -65,8 +65,8 @@
               {:status  200
                :headers {"Content-Type" "application/json"}
                :body    (cheshire/generate-string
-                          [(map #(::body %) (get winner-groups channel))
-                           (map #(::body %) (get loser-groups channel))])}))
+                          [(get winner-groups channel)
+                           (get loser-groups channel)])}))
           (let [end-time (System/currentTimeMillis)
                 diff (- end-time start-time)]
             (when (< diff 2000)
