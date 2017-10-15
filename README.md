@@ -16,10 +16,6 @@ before httpkit :queue-size is reached.  Figure out where to set queue-size.
 _ Reduce queue-size & add a test around it.
 _ Graceful shutdown that play nicely with Docker (sigterm)
     _ Make test
-_ batching-rate-limited-service
-    _ batch, then do single request to receive headers
-    _ make tests
-_ Make a main function which takes options
 _ Write a good one sentance description of this project
 _ Write a paragraph description
 _ Add metrics look in git log for reference
