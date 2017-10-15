@@ -65,8 +65,12 @@
               {:status  200
                :headers {"Content-Type" "application/json"}
                :body    (cheshire/generate-string
-                          [(get winner-groups channel)
-                           (get loser-groups channel)])}))
+                          [(map
+                             #(dissoc % ::channel)
+                             (get winner-groups channel))
+                           (map
+                             #(dissoc % ::channel)
+                             (get loser-groups channel))])}))
           (let [end-time (System/currentTimeMillis)
                 diff (- end-time start-time)]
             (when (< diff 2000)
