@@ -1,4 +1,4 @@
-(defproject rate-limit-scheduler "0.1.0"
+(defproject rate-limit-scheduler "0.1.1"
   :description "FIXME: write description"
   :url "https://github.com/nilpunning/rate-limit-scheduler"
   :license {:name "Eclipse Public License"

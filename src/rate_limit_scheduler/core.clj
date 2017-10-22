@@ -54,7 +54,7 @@
         (let [n (poll-size service)
               {:keys [::draining-queue]} @system
               [winners loser-queue] (sq/poll draining-queue n)
-              [losers _] (sq/drain draining-queue)
+              [losers _] (sq/drain loser-queue)
               winner-resps (request-batch service winners)
               winner-groups (group-by ::channel winner-resps)
               loser-groups (group-by ::channel losers)

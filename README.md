@@ -19,4 +19,5 @@ _ Graceful shutdown that play nicely with Docker (sigterm)
 _ Write a good one sentance description of this project
 _ Write a paragraph description
 _ Add metrics look in git log for reference
+_ Make start and stop idempontent
 ```
