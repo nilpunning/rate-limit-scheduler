@@ -1,6 +1,5 @@
 (ns rate-limit-scheduler.core
   (:require [clojure.java.io :as io]
-            [clojure.core.async :as a]
             [org.httpkit.server :as server]
             [cheshire.core :as cheshire]
             [rate-limit-scheduler
@@ -47,9 +46,9 @@
       ::collecting-queue (sq/make limit last-taken))))
 
 (defn request-loop [system]
-  (let [{:keys [::service ::command-chan]} @system]
+  (let [{:keys [::service]} @system]
     (loop [start-time (System/currentTimeMillis)]
-      (when (not= (a/poll! command-chan) ::stop)
+      (when (::collecting? @system)
         (dosync (alter system collecting-to-draining))
         (let [n (poll-size service)
               {:keys [::draining-queue]} @system
@@ -89,26 +88,30 @@
         system
         {::server-options   server-options
          ::service          rate-limited-service
-         ::command-chan     (a/chan)
          ::collecting?      false
+         ::running?         false
          ::collecting-queue (sq/make limit)
          ::draining-queue   (sq/make limit)}))
     system))
 
 (defn start [system]
-  (dosync
-    (alter
-      system
-      merge
-      {::server              (run-server (::server-options @system) system)
-       ::request-loop-thread (start-thread
-                               "request-loop"
-                               (partial request-loop system))
-       ::collecting?         true})))
+  (when (not (::running? @system))
+    (dosync (alter system assoc ::collecting? true ::running? true))
+    (let [server (run-server (::server-options @system) system)
+          thread (start-thread "request-loop" (partial request-loop system))]
+      (dosync
+        (alter
+          system
+          assoc
+          ::server server
+          ::request-loop-thread thread)))))
 
 (defn stop [system]
-  (dosync (alter system assoc ::collecting? false))
-  (let [{:keys [::server ::command-chan ::request-loop-thread]} @system]
-    (a/put! command-chan ::stop)
-    (.join ^Thread request-loop-thread)
-    (server :timeout 0)))
+  (when (::running? @system)
+    (dosync (alter system assoc ::collecting? false))
+    (let [{:keys [::server ::request-loop-thread]} @system]
+      (.join ^Thread request-loop-thread)
+      (server :timeout 60)
+      (dosync
+        (alter system dissoc ::server ::request-loop-thread)
+        (alter system assoc ::running? false)))))

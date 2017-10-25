@@ -15,15 +15,17 @@
      :method :post
      :body   (cheshire/generate-string reqs)}))
 
-(defn test-rate-limited-service [n]
+(def winners-per-second 10)
+
+(defn test-rate-limited-service []
   (reify
     rls/IRateLimitedService
     (poll-size [_]
-      n)
+      winners-per-second)
     (request-batch [_ reqs]
       reqs)))
 
-(defonce system (rls/make-system server-options nil 10000))
+(defonce system (rls/make-system server-options (test-rate-limited-service) 10000))
 
 (defn requests [n-requests n-in-request]
   (map
@@ -33,11 +35,9 @@
 
 (deftest request-test
   "Puts get through the system to request."
-  (println
+  (prn
     (time
-      (let [winners-per-second 10
-            service (test-rate-limited-service winners-per-second)]
-        (dosync (alter system assoc ::rls/service service))
+      (do
         (rls/start system)
         (let [requests (requests 2000 40)
               promises (vec
@@ -55,13 +55,16 @@
                           0
                           (map (fn [[w _]] (count w)) resps))]
           (rls/stop system)
-          (println "n-winners" n-winners)
+          (prn "n-winners" n-winners)
           (is (= (mod n-winners winners-per-second) 0)))))))
 
 (comment
   (count (requests 1000 40))
   (cheshire/generate-string [[1] [2] [3]])
   (cheshire/parse-string "[[1], [2], [3]]")
+
+  (rls/start system)
+  (rls/running? @system)
   (rls/stop system)
   (deref system)
   (run-tests)
