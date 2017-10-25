@@ -20,7 +20,7 @@
                     cheshire/parse-stream
                     (map #(identity {::request % ::channel channel})))
           status (dosync
-                   (if (true? (::collecting? @system))
+                   (if (::collecting? @system)
                      (if (sq/able? (::collecting-queue @system))
                        (do
                          (alter system update ::collecting-queue sq/put reqs)
@@ -37,44 +37,46 @@
     (partial #'server-handler system)
     server-options))
 
-(defn collecting-to-draining [system]
-  (let [{:keys [::collecting-queue]} system
-        {:keys [::sq/limit ::sq/last-taken]} collecting-queue]
-    (assoc
-      system
-      ::draining-queue collecting-queue
-      ::collecting-queue (sq/make limit last-taken))))
+(defn reset-collecting-queue [system]
+  (dosync
+    (let [{:keys [::collecting-queue]} @system
+          {:keys [::sq/limit ::sq/last-taken]} collecting-queue]
+      (alter
+        system
+        assoc
+        ::collecting-queue
+        (sq/make limit last-taken))
+      collecting-queue)))
 
 (defn request-loop [system]
-  (let [{:keys [::service]} @system]
-    (loop [start-time (System/currentTimeMillis)]
-      (when (::collecting? @system)
-        (dosync (alter system collecting-to-draining))
-        (let [n (poll-size service)
-              {:keys [::draining-queue]} @system
-              [winners loser-queue] (sq/poll draining-queue n)
-              [losers _] (sq/drain loser-queue)
-              winner-resps (request-batch service winners)
-              winner-groups (group-by ::channel winner-resps)
-              loser-groups (group-by ::channel losers)
-              channels (set (concat (keys winner-groups) (keys loser-groups)))]
-          (doseq [channel channels]
-            (server/send!
-              channel
-              {:status  200
-               :headers {"Content-Type" "application/json"}
-               :body    (cheshire/generate-string
-                          [(map
-                             #(dissoc % ::channel)
-                             (get winner-groups channel))
-                           (map
-                             #(dissoc % ::channel)
-                             (get loser-groups channel))])}))
-          (let [end-time (System/currentTimeMillis)
-                diff (- end-time start-time)]
-            (when (< diff 2000)
-              (Thread/sleep (- 2000 diff)))
-            (recur end-time)))))))
+  (loop [start-time (System/currentTimeMillis)]
+    (when (::collecting? @system)
+      (let [draining-queue (reset-collecting-queue system)
+            {:keys [::service]} @system
+            n (poll-size service)
+            [winners loser-queue] (sq/poll draining-queue n)
+            [losers _] (sq/drain loser-queue)
+            winner-resps (request-batch service winners)
+            winner-groups (group-by ::channel winner-resps)
+            loser-groups (group-by ::channel losers)
+            channels (set (concat (keys winner-groups) (keys loser-groups)))]
+        (doseq [channel channels]
+          (server/send!
+            channel
+            {:status  200
+             :headers {"Content-Type" "application/json"}
+             :body    (cheshire/generate-string
+                        [(map
+                           #(dissoc % ::channel)
+                           (get winner-groups channel))
+                         (map
+                           #(dissoc % ::channel)
+                           (get loser-groups channel))])}))
+        (let [end-time (System/currentTimeMillis)
+              diff (- end-time start-time)]
+          (when (< diff 2000)
+            (Thread/sleep (- 2000 diff)))
+          (recur end-time))))))
 
 (defn start-thread [name fn]
   (doto (Thread. ^Runnable fn)
@@ -90,8 +92,7 @@
          ::service          rate-limited-service
          ::collecting?      false
          ::running?         false
-         ::collecting-queue (sq/make limit)
-         ::draining-queue   (sq/make limit)}))
+         ::collecting-queue (sq/make limit)}))
     system))
 
 (defn start [system]
