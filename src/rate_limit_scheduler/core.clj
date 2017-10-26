@@ -6,12 +6,6 @@
              [split-queue :as sq]])
   (:import [java.lang System Thread]))
 
-(defprotocol IRateLimitedService
-  (poll-size [this]
-    "Number of requests to batch.")
-  (request-batch [this reqs]
-    "Makes the requests."))
-
 (defn server-handler [system req]
   (server/with-channel req channel
     (let [reqs (->> req
@@ -52,14 +46,15 @@
   (loop [start-time (System/currentTimeMillis)]
     (when (::collecting? @system)
       (let [draining-queue (reset-collecting-queue system)
-            {:keys [::service]} @system
-            n (poll-size service)
+            {:keys [::poll-size ::request-state ::request-batch]} @system
+            n (poll-size request-state (System/currentTimeMillis))
             [winners loser-queue] (sq/poll draining-queue n)
             [losers _] (sq/drain loser-queue)
-            winner-resps (request-batch service winners)
+            [request-state winner-resps] (request-batch winners)
             winner-groups (group-by ::channel winner-resps)
             loser-groups (group-by ::channel losers)
             channels (set (concat (keys winner-groups) (keys loser-groups)))]
+        (dosync (alter system assoc ::request-state request-state))
         (doseq [channel channels]
           (server/send!
             channel
@@ -83,17 +78,31 @@
     (.setName name)
     (.start)))
 
-(defn make-system [server-options rate-limited-service limit]
-  (let [system (ref {})]
-    (dosync
-      (ref-set
-        system
-        {::server-options   server-options
-         ::service          rate-limited-service
-         ::collecting?      false
-         ::running?         false
-         ::collecting-queue (sq/make limit)}))
-    system))
+(defn make-system [{limit ::limit :or {::limit 2000} :as options}]
+  (ref
+    (merge
+      ; Defaults
+      {; Options passed to httpkit server
+       ::server-options {:port 8080 :queue-size limit}
+       ; Number of requests to make
+       ; (fn [request-state current-time-in-ms])
+       ; => int
+       ::poll-size      (constantly 10)
+       ; Makes the request
+       ; (fn [{::request ::channel}])
+       ; => [request-state (seq {::request ::response ::channel})]
+       ::request-batch  (fn [x] [{} x])}
+      ; Override defaults with options passed in
+      (dissoc options ::limit)
+      ; Internal state
+      {::collecting?      false
+       ::running?         false
+       ::collecting-queue (sq/make limit)
+       ; Typically holds information like:
+       ; {x-rate-limit-limit int
+       ;  x-rate-limit-reset int
+       ;  x-rate-limit-remaining int}
+       ::request-state    {}})))
 
 (defn start [system]
   (when (not (::running? @system))

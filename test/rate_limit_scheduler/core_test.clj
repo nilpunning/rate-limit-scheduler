@@ -15,17 +15,9 @@
      :method :post
      :body   (cheshire/generate-string reqs)}))
 
-(def winners-per-second 10)
-
-(defn test-rate-limited-service []
-  (reify
-    rls/IRateLimitedService
-    (poll-size [_]
-      winners-per-second)
-    (request-batch [_ reqs]
-      reqs)))
-
-(defonce system (rls/make-system server-options (test-rate-limited-service) 10000))
+(defonce system (rls/make-system
+                  {::rls/server-options server-options
+                   ::rls/limit          10000}))
 
 (defn requests [n-requests n-in-request]
   (map
@@ -56,7 +48,7 @@
                           (map (fn [[w _]] (count w)) resps))]
           (rls/stop system)
           (prn "n-winners" n-winners)
-          (is (= (mod n-winners winners-per-second) 0)))))))
+          (is (= (mod n-winners 10) 0)))))))
 
 (comment
   (count (requests 1000 40))
