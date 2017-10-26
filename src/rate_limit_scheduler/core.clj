@@ -78,19 +78,26 @@
     (.setName name)
     (.start)))
 
-(defn make-system [{limit ::limit :or {::limit 2000} :as options}]
+(defn make-system
+  "
+  Options:
+    ::limit             ; Number of simultaneous requestors allowed before
+                        ; 429 Too Many Requests returned
+    ::server-options    ; Options passed to httpkit server
+    ::poll-size         ; Calculates number of requests to make
+                        ; (fn [request-state current-time-in-ms])
+                        ; => int
+    ::request-batch     ; Makes the actual request
+                        ; (fn [{::request ::channel}])
+                        ; => [request-state
+                              (seq {::request ::response ::channel})]
+  "
+  [{limit ::limit :or {::limit 2000} :as options}]
   (ref
     (merge
       ; Defaults
-      {; Options passed to httpkit server
-       ::server-options {:port 8080 :queue-size limit}
-       ; Number of requests to make
-       ; (fn [request-state current-time-in-ms])
-       ; => int
+      {::server-options {:port 8080 :queue-size limit}
        ::poll-size      (constantly 10)
-       ; Makes the request
-       ; (fn [{::request ::channel}])
-       ; => [request-state (seq {::request ::response ::channel})]
        ::request-batch  (fn [x] [{} x])}
       ; Override defaults with options passed in
       (dissoc options ::limit)

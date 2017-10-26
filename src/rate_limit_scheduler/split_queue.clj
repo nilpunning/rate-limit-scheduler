@@ -20,15 +20,17 @@
       (assoc queues i new-queue))))
 
 (defn make
+  "
+  limit            ; max number of queues
+  init-round-robin ; initial value used in round-robin comparision
+  "
   ([limit init-round-robin]
-   "limit            - max number of queues
-    init-round-robin - initial value used in round-robin comparision"
    {::limit      limit
     ::n          0
     ::queues     []
     ::last-taken init-round-robin})
   ([limit]
-    (make limit -1)))
+   (make limit -1)))
 
 (defn count-sq [split-queue]
   (let [{queues ::queues} split-queue]
