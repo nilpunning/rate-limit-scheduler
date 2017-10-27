@@ -47,7 +47,9 @@
     (when (::collecting? @system)
       (let [draining-queue (reset-collecting-queue system)
             {:keys [::poll-size ::request-state ::request-batch]} @system
-            n (poll-size request-state (System/currentTimeMillis))
+            n (poll-size
+                request-state
+                (- (System/currentTimeMillis) start-time))
             [winners loser-queue] (sq/poll draining-queue n)
             [losers _] (sq/drain loser-queue)
             [request-state winner-resps] (request-batch winners)
@@ -85,10 +87,10 @@
                         ; 429 Too Many Requests returned
     ::server-options    ; Options passed to httpkit server
     ::poll-size         ; Calculates number of requests to make
-                        ; (fn [request-state current-time-in-ms])
+                        ; (fn [request-state ms-since-last-request])
                         ; => int
     ::request-batch     ; Makes the actual request
-                        ; (fn [{::request ::channel}])
+                        ; (fn [(seq {::request ::channel})])
                         ; => [request-state
                               (seq {::request ::response ::channel})]
   "
