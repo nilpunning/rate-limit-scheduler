@@ -10,10 +10,6 @@ _ Not done yet
 Z Changed mind, not going to do.
 X Done
 
-If core-test.request-test number of requests is increased from 2000 to 5000 on my machine the server receives this error:
-ERROR - accept incoming request java.io.IOException: Too many open files
-before httpkit :queue-size is reached.  Figure out where to set queue-size.
-
 _ Reduce queue-size & add a test around it.
 _ Graceful shutdown that play nicely with Docker (sigterm)
     _ Make test
@@ -22,6 +18,21 @@ _ Write a paragraph description
 _ Add metrics look in git log for reference
 X Make start and stop idempontent
 ```
+
+## Troubleshooting
+
+This error may be encountered when attempting a large number of requests:
+```
+ERROR - accept incoming request java.io.IOException: Too many open files
+```
+
+This may occur even before the specified limit is reached.  As a security precaution the operating system limits the number of possible open files.  This can be adjusted.
+ 
+For example if you wanted to increase the limit to 10000 on Arch Linux you would edit /etc/systemd/system.conf and /etc/systemd/user.conf.  Both files must have the following line added to the Manager section:
+```
+DefaultLimitNOFILE=10000
+```
+
 ## License
 
 Copyright 2017 David O'Meara
