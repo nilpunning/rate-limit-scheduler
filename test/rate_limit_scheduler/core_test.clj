@@ -5,19 +5,19 @@
             [rate-limit-scheduler
              [core :as rls]]))
 
-(def server-options {:port 8080})
+
+(defn make []
+  (rls/make-system {::rls/limit 10000}))
+
+(defonce system (atom (make)))
 
 (defn post [reqs]
   (http/request
     {:url    (str
                "http://localhost:"
-               (:port server-options))
+               (get-in @@system [::rls/server-options :port]))
      :method :post
      :body   (cheshire/generate-string reqs)}))
-
-(defonce system (rls/make-system
-                  {::rls/server-options server-options
-                   ::rls/limit          10000}))
 
 (defn requests [n-requests n-in-request]
   (map
@@ -30,23 +30,12 @@
   (prn
     (time
       (do
-        (rls/start system)
-        (let [requests (requests 2000 40)
-              promises (vec
-                         (map
-                           #(let [p (promise)]
-                              (rls/start-thread
-                                (str "post" (ffirst %))
-                                (fn []
-                                  (deliver p @(post %))))
-                              p)
-                           requests))
-              resps (map #(cheshire/parse-string (:body @%)) promises)
-              n-winners (reduce
-                          (fn [a w] (+ a w))
-                          0
-                          (map (fn [[w _]] (count w)) resps))]
-          (rls/stop system)
+        (rls/start @system)
+        (let [requests (requests 2048 40)
+              posts (vec (map post requests))
+              resps (map #(cheshire/parse-string (:body @%)) posts)
+              n-winners (reduce + 0 (map (fn [[w _]] (count w)) resps))]
+          (rls/stop @system)
           (prn "n-winners" n-winners)
           (is (= (mod n-winners 10) 0)))))))
 
@@ -55,9 +44,10 @@
   (cheshire/generate-string [[1] [2] [3]])
   (cheshire/parse-string "[[1], [2], [3]]")
 
-  (rls/start system)
-  (rls/running? @system)
-  (rls/stop system)
-  (deref system)
+  (reset! system (make))
+
+  (rls/start @system)
+  (rls/stop @system)
+  (deref @system)
   (run-tests)
   )

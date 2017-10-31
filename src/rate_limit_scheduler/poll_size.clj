@@ -15,7 +15,7 @@
 
 (comment
   (let [i (range 0 61 2)
-        p (map #(linear-poll-size 60 (- 60 %) 60) i)
+        p (map #(linear-poll-size 2400 (- 60 %) 60) i)
         r (reductions + p)]
     (prn "Time, Poll Size, Total Requests")
     (doseq [t (partition 3 (interleave i p r))]
