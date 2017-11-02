@@ -56,7 +56,7 @@
             winner-groups (group-by ::channel winner-resps)
             loser-groups (group-by ::channel losers)
             channels (set (concat (keys winner-groups) (keys loser-groups)))]
-        (dosync (alter system assoc ::request-state request-state))
+        (dosync (alter system update ::request-state merge request-state))
         (doseq [channel channels]
           (server/send!
             channel
