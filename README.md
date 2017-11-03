@@ -8,19 +8,17 @@ Service --40 reqs--->|                        |
 Service --40 reqs--->|  Rate Limit Scheduler  |-------------> Rate Limited Service
 Service --40 reqs--->|                        |
                      +------------------------+
-
-Requests to the rate limit scheduler are made in batches.  
-The requests in each batch are scheduled to be requested of the rate limited service in a round robin fashion.  
-The rate limited service's limits are respected.
-
+```
+Requests to the rate limit scheduler are made in batches.  The requests in each batch are scheduled to be requested of the rate limited service in a round robin fashion.  The rate limited service's limits are respected.
+```
                      +------------------------+
 Service ------------>|                        |
 Service ------------>|  Rate Limit Scheduler  |--100 reqs---> Rate Limited Service
 Service ------------>|                        |                  (100 limit)
                      +------------------------+
-
+```
 The requesting services receive their fulfilled requests.
-
+```
                      +------------------------+
 Service <--34 resps--|                        |
 Service <--33 resps--|  Rate Limit Scheduler  |<--100 resps-- Rate Limited Service
