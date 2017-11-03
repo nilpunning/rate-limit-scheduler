@@ -46,7 +46,8 @@
   (loop [start-time (System/currentTimeMillis)]
     (when (::collecting? @system)
       (let [draining-queue (reset-collecting-queue system)
-            {:keys [::poll-size ::request-state ::request-batch]} @system
+            {:keys [::poll-size ::request-state ::request-batch ::log-metrics]}
+            @system
             n (poll-size
                 request-state
                 (- (System/currentTimeMillis) start-time))
@@ -69,6 +70,7 @@
                          (map
                            #(dissoc % ::channel)
                            (get loser-groups channel))])}))
+        (log-metrics (sq/stats draining-queue))
         (let [end-time (System/currentTimeMillis)
               diff (- end-time start-time)]
           (when (< diff 2000)
@@ -93,6 +95,8 @@
                         ; (fn [(seq {::request ::channel})])
                         ; => [request-state
                               (seq {::request ::response ::channel})]
+    ::log-metrics       ; Called ever cycle with stats to log
+                        ; (fn [{}]) => nil
   "
   [{limit ::limit :or {::limit 2000} :as options}]
   (ref
@@ -100,7 +104,8 @@
       ; Defaults
       {::server-options {:port 8080 :queue-size limit}
        ::poll-size      (constantly 10)
-       ::request-batch  (fn [x] [{} x])}
+       ::request-batch  (fn [x] [{} x])
+       ::log-metrics    prn}
       ; Override defaults with options passed in
       (dissoc options ::limit)
       ; Internal state

@@ -1,4 +1,4 @@
-(defproject rate-limit-scheduler "0.1.2"
+(defproject rate-limit-scheduler "0.1.3"
   :description "FIXME: write description"
   :url "https://github.com/nilpunning/rate-limit-scheduler"
   :license {:name "Apache License, Version 2.0"

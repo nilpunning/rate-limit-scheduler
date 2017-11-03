@@ -26,7 +26,6 @@
   "
   ([limit init-round-robin]
    {::limit      limit
-    ::n          0
     ::queues     []
     ::last-taken init-round-robin})
   ([limit]
@@ -38,8 +37,8 @@
 
 (defn stats [split-queue]
   (let [{queues ::queues} split-queue]
-    {:n        (count-sq split-queue)
-     :n-queues (count queues)}))
+    {::n        (count-sq split-queue)
+     ::n-queues (count queues)}))
 
 (defn able? [split-queue]
   (let [{:keys [::limit ::queues]} split-queue]
