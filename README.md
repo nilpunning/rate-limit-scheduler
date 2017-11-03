@@ -44,7 +44,7 @@ X Write a one sentance description of this project
 X Write a paragraph description
 X Add metrics look in git log for reference
 X Make start and stop idempontent
-_ Make test able to work remotely
+X Make test able to work remotely
 ```
 
 ## Troubleshooting

@@ -3,7 +3,8 @@
             [org.httpkit.client :as http]
             [cheshire.core :as cheshire]
             [rate-limit-scheduler
-             [core :as rls]]))
+             [core :as rls]])
+  (:import [java.lang Thread]))
 
 
 (defn make []
@@ -11,11 +12,10 @@
 
 (defonce system (atom (make)))
 
-(defn post [reqs]
+(defn post [sleep url reqs]
+  (Thread/sleep sleep)
   (http/request
-    {:url    (str
-               "http://localhost:"
-               (get-in @@system [::rls/server-options :port]))
+    {:url    url
      :method :post
      :body   (cheshire/generate-string reqs)}))
 
@@ -25,19 +25,36 @@
       (map (fn [ii] (identity [i ii])) (range n-in-request)))
     (range n-requests)))
 
-(deftest request-test
-  "Puts get through the system to request."
+(defn stress-test [sleep url]
   (prn
     (time
       (do
         (rls/start @system)
         (let [requests (requests 2048 40)
-              posts (vec (map post requests))
+              posts (doall (map #(post sleep url %) requests))
               resps (map #(cheshire/parse-string (:body @%)) posts)
-              n-winners (reduce + 0 (map (fn [[w _]] (count w)) resps))]
+              [nw nl] (reduce
+                        (fn [[aw al] [w l]]
+                          [(+ aw w)
+                           (+ al l)])
+                        [0 0]
+                        (map
+                          (fn [[w l]]
+                            [(count w)
+                             (count l)])
+                          resps))]
           (rls/stop @system)
-          (prn "n-winners" n-winners)
-          (is (= (mod n-winners 10) 0)))))))
+          (prn "nw" nw)
+          (prn "nl" nl)
+          (is (= (mod nw 10) 0)))))))
+
+(deftest request-test
+  "Puts get through the system to request."
+  (stress-test
+    10
+    (str
+      "http://localhost:"
+      (get-in @@system [::rls/server-options :port]))))
 
 (comment
   (count (requests 1000 40))
@@ -49,5 +66,6 @@
   (rls/start @system)
   (rls/stop @system)
   (deref @system)
+
   (run-tests)
   )
