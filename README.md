@@ -38,8 +38,8 @@ Z Changed mind, not going to do.
 X Done
 
 Z Reduce queue-size & add a test around it.
-_ Graceful shutdown that play nicely with Docker (sigterm)
-    _ Make test
+X Graceful shutdown that play nicely with Docker (sigterm)
+    Z Make test
 X Write a one sentance description of this project
 X Write a paragraph description
 X Add metrics look in git log for reference

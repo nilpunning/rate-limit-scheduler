@@ -4,7 +4,7 @@
             [cheshire.core :as cheshire]
             [rate-limit-scheduler
              [split-queue :as sq]])
-  (:import [java.lang System Thread]))
+  (:import [java.lang System Thread Runtime]))
 
 (defn server-handler [system req]
   (server/with-channel req channel
@@ -118,24 +118,39 @@
        ;  x-rate-limit-remaining int}
        ::request-state    {}})))
 
+(defn stop [system]
+  (when (::running? @system)
+    (dosync (alter system assoc ::collecting? false))
+    (let [{:keys [::server
+                  ::request-loop-thread
+                  ::shutdown-hook
+                  ::shutting-down?]} @system]
+      (.join ^Thread request-loop-thread)
+      (server :timeout 60)
+      (when (not shutting-down?)
+        (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
+      (dosync
+        (alter system dissoc ::server ::request-loop-thread ::shutdown-hook)
+        (alter system assoc ::running? false)))))
+
+(defn shutdown-hook [system]
+  (Thread.
+    ^Runnable
+    (fn []
+      (dosync (alter system assoc ::shutting-down? true))
+      (stop system))))
+
 (defn start [system]
   (when (not (::running? @system))
     (dosync (alter system assoc ::collecting? true ::running? true))
     (let [server (run-server (::server-options @system) system)
-          thread (start-thread "request-loop" (partial request-loop system))]
+          thread (start-thread "request-loop" (partial request-loop system))
+          shutdown-hook (shutdown-hook system)]
+      (.addShutdownHook (Runtime/getRuntime) shutdown-hook)
       (dosync
         (alter
           system
           assoc
           ::server server
-          ::request-loop-thread thread)))))
-
-(defn stop [system]
-  (when (::running? @system)
-    (dosync (alter system assoc ::collecting? false))
-    (let [{:keys [::server ::request-loop-thread]} @system]
-      (.join ^Thread request-loop-thread)
-      (server :timeout 60)
-      (dosync
-        (alter system dissoc ::server ::request-loop-thread)
-        (alter system assoc ::running? false)))))
+          ::request-loop-thread thread
+          ::shutdown-hook shutdown-hook)))))
