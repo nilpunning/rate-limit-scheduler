@@ -59,7 +59,7 @@
   (loop [start-time (System/currentTimeMillis)]
     (when (::collecting? @system)
       (let [draining-queue (reset-collecting-queue system)
-            {:keys [::poll-size ::request-state ::request-batch ::log-metrics]}
+            {:keys [::poll-size ::request-state ::request-batch ::log-fn]}
             @system
             n (poll-size
                 request-state
@@ -83,7 +83,7 @@
                          (map
                            #(dissoc % ::channel)
                            (get loser-groups channel))])}))
-        (log-metrics (sq/stats draining-queue))
+        (log-fn (sq/stats draining-queue))
         (let [end-time (System/currentTimeMillis)
               diff (- end-time start-time)]
           (when (< diff 2000)
@@ -108,7 +108,7 @@
                         ; (fn [(seq {::request ::channel})])
                         ; => [request-state
                               (seq {::request ::response ::channel})]
-    ::log-metrics       ; Called ever cycle with stats to log
+    ::log-fn            ; Called ever cycle with stats to log
                         ; (fn [{}]) => nil
   "
   [{limit ::limit :or {::limit 2000} :as options}]
@@ -118,7 +118,7 @@
       {::server-options {:port 8080 :queue-size limit}
        ::poll-size      (constantly 10)
        ::request-batch  (fn [x] [{} x])
-       ::log-metrics    prn}
+       ::log-fn         prn}
       ; Override defaults with options passed in
       (dissoc options ::limit)
       ; Internal state
@@ -133,6 +133,7 @@
 
 (defn stop [system]
   (when (::running? @system)
+    ((::log-fn @system) "Shutting down.")
     (dosync (alter system assoc ::collecting? false))
     (let [{:keys [::server
                   ::request-loop-thread
@@ -144,12 +145,14 @@
         (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
       (dosync
         (alter system dissoc ::server ::request-loop-thread ::shutdown-hook)
-        (alter system assoc ::running? false)))))
+        (alter system assoc ::running? false))
+      ((::log-fn @system) "Done shutting down."))))
 
 (defn shutdown-hook [system]
   (Thread.
     ^Runnable
     (fn []
+      ((::log-fn @system) "Received shutdown hook.")
       (dosync (alter system assoc ::shutting-down? true))
       (stop system))))
 
