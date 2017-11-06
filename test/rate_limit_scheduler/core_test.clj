@@ -48,13 +48,23 @@
           (prn "nl" nl)
           (is (= (mod nw 10) 0)))))))
 
-(deftest request-test
-  "Puts get through the system to request."
-  (stress-test
-    10
-    (str
-      "http://localhost:"
-      (get-in @@system [::rls/server-options :port]))))
+(defn local-url []
+  (str
+    "http://localhost:"
+    (get-in @@system [::rls/server-options :port])))
+
+(deftest local-stress-test
+  (stress-test 10 (local-url)))
+
+(deftest get-ok
+  (rls/start @system)
+  (is (= (:status @(http/request {:url (local-url) :method :get})) 200))
+  (rls/stop @system))
+
+(deftest head-not-allowed
+  (rls/start @system)
+  (is (= (:status @(http/request {:url (local-url) :method :head})) 405))
+  (rls/stop @system))
 
 (comment
   (count (requests 1000 40))

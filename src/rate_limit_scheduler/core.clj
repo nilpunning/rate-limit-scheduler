@@ -6,25 +6,38 @@
              [split-queue :as sq]])
   (:import [java.lang System Thread Runtime]))
 
+(defn handle-get [channel]
+  (server/send! channel {:status 200 :body "Running"}))
+
+(defn handle-post [system req channel]
+  (let [reqs (->> req
+                  :body
+                  io/reader
+                  cheshire/parse-stream
+                  (map #(identity {::request % ::channel channel})))
+        status (dosync
+                 (if (::collecting? @system)
+                   (if (sq/able? (::collecting-queue @system))
+                     (do
+                       (alter system update ::collecting-queue sq/put reqs)
+                       false)
+                     ; Too Many Requests
+                     429)
+                   ; Service Unavailable
+                   503))]
+    (when status
+      (server/send! channel {:status status}))))
+
+(defn route [system {:keys [request-method] :as req} channel]
+  (case request-method
+    :get (handle-get channel)
+    :post (handle-post system req channel)
+    (server/send!
+      channel
+      {:status 405 :headers {"Allow" "GET, POST"}})))
+
 (defn server-handler [system req]
-  (server/with-channel req channel
-    (let [reqs (->> req
-                    :body
-                    io/reader
-                    cheshire/parse-stream
-                    (map #(identity {::request % ::channel channel})))
-          status (dosync
-                   (if (::collecting? @system)
-                     (if (sq/able? (::collecting-queue @system))
-                       (do
-                         (alter system update ::collecting-queue sq/put reqs)
-                         false)
-                       ; Too Many Requests
-                       429)
-                     ; Service Unavailable
-                     503))]
-      (when status
-        (server/send! channel {:status status})))))
+  (server/with-channel req channel (route system req channel)))
 
 (defn run-server [server-options system]
   (server/run-server
