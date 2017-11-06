@@ -28,25 +28,6 @@ Service <--33 resps--|                        |                  (100 limit)
 
 Requests are collected over a two second window.  As the rate limit is approached more requests are made in an attempt to get as close to the limit as possible.
 
-
-## TODO
-```
-Key:
-_ Not done yet
-/ Half done
-Z Changed mind, not going to do.
-X Done
-
-Z Reduce queue-size & add a test around it.
-X Graceful shutdown that play nicely with Docker (sigterm)
-    Z Make test
-X Write a one sentance description of this project
-X Write a paragraph description
-X Add metrics look in git log for reference
-X Make start and stop idempontent
-X Make test able to work remotely
-```
-
 ## Troubleshooting
 
 This error may be encountered when attempting a large number of requests:
