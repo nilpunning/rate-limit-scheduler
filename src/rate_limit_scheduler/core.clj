@@ -41,7 +41,7 @@
 
 (defn run-server [server-options system]
   (server/run-server
-    (partial #'server-handler system)
+    ((::middleware @system) (partial server-handler system))
     server-options))
 
 (defn reset-collecting-queue [system]
@@ -101,6 +101,7 @@
     ::limit             ; Number of simultaneous requestors allowed before
                         ; 429 Too Many Requests returned
     ::server-options    ; Options passed to httpkit server
+    ::middleware        ; (fn [handler]) => (fn [req])
     ::poll-size         ; Calculates number of requests to make
                         ; (fn [request-state ms-since-last-request])
                         ; => int
@@ -116,6 +117,7 @@
     (merge
       ; Defaults
       {::server-options {:port 8080 :queue-size limit}
+       ::middleware     (fn [handler] (fn [req] (handler req)))
        ::poll-size      (constantly 10)
        ::request-batch  (fn [x] [{} x])
        ::log-fn         prn}

@@ -74,7 +74,9 @@
   (reset! system (make))
 
   (rls/start @system)
+  (def ret (post 0 (local-url) ["a" "b"]))
   (rls/stop @system)
+  (deref ret)
   (deref @system)
 
   (run-tests)
