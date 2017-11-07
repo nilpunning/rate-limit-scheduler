@@ -2,13 +2,16 @@
   (:require [clojure.test :refer :all]
             [org.httpkit.client :as http]
             [cheshire.core :as cheshire]
-            [rate-limit-scheduler
-             [core :as rls]])
+            [rate-limit-scheduler.core :as rls]
+            [rate-limit-scheduler.auth.jwt :as jwt])
   (:import [java.lang Thread]))
 
+(def jwt-secret "kl#sjd0c3&jDK)*")
 
 (defn make []
-  (rls/make-system {::rls/limit 10000}))
+  (rls/make-system
+    {::rls/limit      10000
+     ::rls/middleware (partial jwt/middleware prn jwt-secret)}))
 
 (defonce system (atom (make)))
 
@@ -17,7 +20,7 @@
   (http/request
     {:url    url
      :method :post
-     :body   (cheshire/generate-string reqs)}))
+     :body   (jwt/encode jwt-secret (cheshire/generate-string reqs))}))
 
 (defn requests [n-requests n-in-request]
   (map
