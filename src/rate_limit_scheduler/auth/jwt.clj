@@ -28,7 +28,7 @@
     (catch JWTVerificationException ex
       (log-fn ex))))
 
-(defn middleware [log-fn secret handler]
+(defn middleware [{:keys [::log-fn ::secret]} handler]
   (fn [req]
     (case (:request-method req)
       :post (handler (update req :body decode secret log-fn))

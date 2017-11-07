@@ -11,7 +11,10 @@
 (defn make []
   (rls/make-system
     {::rls/limit      10000
-     ::rls/middleware (partial jwt/middleware prn jwt-secret)}))
+     ::rls/middleware (partial
+                        jwt/middleware
+                        {::jwt/log-fn prn
+                         ::jwt/secret jwt-secret})}))
 
 (defonce system (atom (make)))
 
