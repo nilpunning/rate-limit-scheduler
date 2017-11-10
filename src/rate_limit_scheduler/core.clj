@@ -66,11 +66,11 @@
                 (- (System/currentTimeMillis) start-time))
             [winners loser-queue] (sq/poll draining-queue n)
             [losers _] (sq/drain loser-queue)
-            [request-state winner-resps] (request-batch winners)
+            [new-request-state winner-resps] (request-batch winners)
             winner-groups (group-by ::channel winner-resps)
             loser-groups (group-by ::channel losers)
             channels (set (concat (keys winner-groups) (keys loser-groups)))]
-        (dosync (alter system update ::request-state merge request-state))
+        (dosync (alter system update ::request-state merge new-request-state))
         (doseq [channel channels]
           (server/send!
             channel
@@ -83,7 +83,10 @@
                          (map
                            #(dissoc % ::channel)
                            (get loser-groups channel))])}))
-        (log-fn (sq/stats draining-queue))
+        (log-fn
+          (merge
+            (sq/stats draining-queue)
+            (select-keys @system [::request-state])))
         (let [end-time (System/currentTimeMillis)
               diff (- end-time start-time)]
           (when (< diff 2000)
