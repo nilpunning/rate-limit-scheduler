@@ -45,13 +45,16 @@
            :x-rate-limit-reset     60
            :x-rate-limit-remaining 1}
           request-state-defaults
-          request-state)]
-    (if (< x-rate-limit-reset 5)
+          request-state)
+        s-since-last-request (/ ms-since-last-request 1000.0)
+        expired (> s-since-last-request x-rate-limit-reset)
+        remaining (if expired x-rate-limit-limit x-rate-limit-remaining)
+        reset (if expired 60 x-rate-limit-reset)]
+    (if (< reset 5)
       0
       (min
         (specific-poll-size-fn
           x-rate-limit-limit
-          (Math/round ^double (- x-rate-limit-reset
-                                 (/ ms-since-last-request 1000.0)))
-          x-rate-limit-remaining)
-        x-rate-limit-remaining))))
+          (Math/round ^double (- x-rate-limit-reset s-since-last-request))
+          remaining)
+        remaining))))
