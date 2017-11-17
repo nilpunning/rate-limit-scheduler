@@ -61,10 +61,8 @@
       (let [draining-queue (reset-collecting-queue system)
             {:keys [::poll-size ::request-state ::request-batch ::log-fn]}
             @system
-            n (poll-size
-                request-state
-                (- (System/currentTimeMillis) start-time))
-            [winners loser-queue] (sq/poll draining-queue n)
+            [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
+            [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
             [losers _] (sq/drain loser-queue)
             [new-request-state winner-resps] (request-batch winners)
             winner-groups (group-by ::channel winner-resps)
@@ -106,7 +104,7 @@
     ::server-options    ; Options passed to httpkit server
     ::middleware        ; (fn [handler]) => (fn [req])
     ::poll-size         ; Calculates number of requests to make
-                        ; (fn [request-state ms-since-last-request])
+                        ; (fn [request-state])
                         ; => int
     ::request-batch     ; Makes the actual request
                         ; (fn [(seq {::request ::channel})])

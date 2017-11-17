@@ -31,22 +31,26 @@
   request-state                 ; map of the following format:
   {:x-rate-limit-limit     int  ; rate limit per minute
    :x-rate-limit-reset     int  ; seconds until period ends and remaining resets
-   :x-rate-limit-remaining int} ; remaining in period
+   :x-rate-limit-remaining int  ; remaining in period
+   :rate-limit-scheduler.poll-size/last-request-time int}
   "
   [specific-poll-size-fn
    request-state-defaults
-   request-state
-   ms-since-last-request]
+   request-state]
   (let [{:keys [x-rate-limit-limit
                 x-rate-limit-reset
-                x-rate-limit-remaining]}
+                x-rate-limit-remaining
+                ::last-request-time]}
         (merge
           {:x-rate-limit-limit     100
            :x-rate-limit-reset     60
-           :x-rate-limit-remaining 1}
+           :x-rate-limit-remaining 1
+           ::last-request-time     (System/currentTimeMillis)}
           request-state-defaults
           request-state)
-        s-since-last-request (/ ms-since-last-request 1000.0)
+        s-since-last-request (/
+                               (- (System/currentTimeMillis) last-request-time)
+                               1000.0)
         expired (> s-since-last-request x-rate-limit-reset)
         remaining (if expired x-rate-limit-limit x-rate-limit-remaining)
         reset (if expired 60 x-rate-limit-reset)]

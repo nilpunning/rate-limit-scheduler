@@ -1,4 +1,4 @@
-(defproject rate-limit-scheduler "0.2.2"
+(defproject rate-limit-scheduler "0.2.3"
   :description "Schedules requests to a rate limited service"
   :url "https://github.com/nilpunning/rate-limit-scheduler"
   :license {:name "Apache License, Version 2.0"

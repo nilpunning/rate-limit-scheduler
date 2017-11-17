@@ -82,6 +82,9 @@
   (reset! system (make))
 
   (rls/start @system)
+
+  (deref (http/request {:url (local-url) :method :get :timeout 10}))
+
   (def ret (post 0 (local-url) ["a" "b"]))
   (rls/stop @system)
   (deref ret)
