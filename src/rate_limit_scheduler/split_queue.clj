@@ -1,6 +1,4 @@
-(ns rate-limit-scheduler.split-queue
-  (:import [java.lang Thread]
-           [clojure.lang PersistentQueue]))
+(ns rate-limit-scheduler.split-queue)
 
 (defn round-robin [s last-taken]
   (first (apply concat (reverse (split-with (partial >= last-taken) s)))))

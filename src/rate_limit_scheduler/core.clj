@@ -62,7 +62,6 @@
             {:keys [::poll-size ::request-state ::request-batch ::log-fn]}
             @system
             [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
-            [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
             [losers _] (sq/drain loser-queue)
             [new-request-state winner-resps] (request-batch winners)
             winner-groups (group-by ::channel winner-resps)
@@ -113,26 +112,27 @@
     ::log-fn            ; Called ever cycle with stats to log
                         ; (fn [{}]) => nil
   "
-  [{limit ::limit :or {::limit 2000} :as options}]
-  (ref
-    (merge
-      ; Defaults
-      {::server-options {:port 8080 :queue-size limit}
-       ::middleware     (fn [handler] (fn [req] (handler req)))
-       ::poll-size      (constantly 10)
-       ::request-batch  (fn [x] [{} x])
-       ::log-fn         prn}
-      ; Override defaults with options passed in
-      (dissoc options ::limit)
-      ; Internal state
-      {::collecting?      false
-       ::running?         false
-       ::collecting-queue (sq/make limit)
-       ; Typically holds information like:
-       ; {x-rate-limit-limit int
-       ;  x-rate-limit-reset int
-       ;  x-rate-limit-remaining int}
-       ::request-state    {}})))
+  [{limit ::limit :as options}]
+  (let [limit (or limit 2000)]
+    (ref
+      (merge
+        ; Defaults
+        {::server-options {:port 8080 :queue-size limit}
+         ::middleware     (fn [handler] (fn [req] (handler req)))
+         ::poll-size      (constantly 10)
+         ::request-batch  (fn [x] [{} x])
+         ::log-fn         prn}
+        ; Override defaults with options passed in
+        (dissoc options ::limit)
+        ; Internal state
+        {::collecting?      false
+         ::running?         false
+         ::collecting-queue (sq/make limit)
+         ; Typically holds information like:
+         ; {x-rate-limit-limit int
+         ;  x-rate-limit-reset int
+         ;  x-rate-limit-remaining int}
+         ::request-state    {}}))))
 
 (defn stop [system]
   (when (::running? @system)
