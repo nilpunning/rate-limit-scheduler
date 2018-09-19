@@ -56,9 +56,10 @@
       collecting-queue)))
 
 (defn request-loop [system]
-  (loop [start-time (System/currentTimeMillis)]
+  (loop []
     (when (::collecting? @system)
-      (let [draining-queue (reset-collecting-queue system)
+      (let [start-time (System/currentTimeMillis)
+            draining-queue (reset-collecting-queue system)
             {:keys [::poll-size ::request-state ::request-batch ::log-fn]}
             @system
             [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
@@ -88,7 +89,7 @@
               diff (- end-time start-time)]
           (when (< diff 2000)
             (Thread/sleep (- 2000 diff)))
-          (recur end-time))))))
+          (recur))))))
 
 (defn start-thread [name fn]
   (doto (Thread. ^Runnable fn)
