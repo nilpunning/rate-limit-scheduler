@@ -1,6 +1,6 @@
 (ns rate-limit-scheduler.auth.api-key)
 
-(defn post [{:keys [::log-fn ::api-key]} {:keys [headers] :as req} handler]
+(defn post [{:keys [::api-key]} {:keys [headers] :as req} handler]
   (if (= api-key (get headers "api-key"))
     (handler req)
     {:status 401}))

@@ -55,41 +55,44 @@
         (sq/make limit last-taken))
       collecting-queue)))
 
+(defn collect [system]
+  (let [draining-queue (reset-collecting-queue system)
+        {:keys [::poll-size ::request-state ::request-batch ::log-fn]} @system
+        [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
+        [losers _] (sq/drain loser-queue)
+        [new-request-state winner-resps] (request-batch winners)
+        winner-groups (group-by ::channel winner-resps)
+        loser-groups (group-by ::channel losers)
+        channels (set (concat (keys winner-groups) (keys loser-groups)))]
+    (dosync (alter system update ::request-state merge new-request-state))
+    (doseq [channel channels]
+      (server/send!
+        channel
+        {:status  200
+         :headers {"Content-Type" "application/json"}
+         :body    (cheshire/generate-string
+                    [(map #(dissoc % ::channel) (get winner-groups channel))
+                     (map #(dissoc % ::channel) (get loser-groups channel))])}))
+    (log-fn
+      (merge
+        (sq/stats draining-queue)
+        (select-keys @system [::request-state])))))
+
+(defn sleep [fn]
+  (let [start-time (System/currentTimeMillis)]
+    (fn)
+    (let [end-time (System/currentTimeMillis)
+          diff (- end-time start-time)]
+      (when (< diff 2000)
+        (Thread/sleep (- 2000 diff))))))
+
 (defn request-loop [system]
-  (loop []
-    (when (::collecting? @system)
-      (let [start-time (System/currentTimeMillis)
-            draining-queue (reset-collecting-queue system)
-            {:keys [::poll-size ::request-state ::request-batch ::log-fn]}
-            @system
-            [winners loser-queue] (sq/poll draining-queue (poll-size request-state))
-            [losers _] (sq/drain loser-queue)
-            [new-request-state winner-resps] (request-batch winners)
-            winner-groups (group-by ::channel winner-resps)
-            loser-groups (group-by ::channel losers)
-            channels (set (concat (keys winner-groups) (keys loser-groups)))]
-        (dosync (alter system update ::request-state merge new-request-state))
-        (doseq [channel channels]
-          (server/send!
-            channel
-            {:status  200
-             :headers {"Content-Type" "application/json"}
-             :body    (cheshire/generate-string
-                        [(map
-                           #(dissoc % ::channel)
-                           (get winner-groups channel))
-                         (map
-                           #(dissoc % ::channel)
-                           (get loser-groups channel))])}))
-        (log-fn
-          (merge
-            (sq/stats draining-queue)
-            (select-keys @system [::request-state])))
-        (let [end-time (System/currentTimeMillis)
-              diff (- end-time start-time)]
-          (when (< diff 2000)
-            (Thread/sleep (- 2000 diff)))
-          (recur))))))
+  (while (::collecting? @system)
+    (sleep
+      #(try
+         (collect system)
+         (catch Exception e
+           ((::error-fn @system) e))))))
 
 (defn start-thread [name fn]
   (doto (Thread. ^Runnable fn)
@@ -112,6 +115,8 @@
                               (seq {::request ::response ::channel})]
     ::log-fn            ; Called ever cycle with stats to log
                         ; (fn [{}]) => nil
+    ::error-fn          ; Called when an error occurs
+                        ; (fn [exception]) => nil
   "
   [{limit ::limit :as options}]
   (let [limit (or limit 2000)]
@@ -122,7 +127,8 @@
          ::middleware     (fn [handler] (fn [req] (handler req)))
          ::poll-size      (constantly 10)
          ::request-batch  (fn [x] [{} x])
-         ::log-fn         prn}
+         ::log-fn         prn
+         ::error-fn       prn}
         ; Override defaults with options passed in
         (dissoc options ::limit)
         ; Internal state
